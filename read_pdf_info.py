@@ -60,19 +60,19 @@ def find_revision_position(img):
             part_y2 = data['top'][i]
 
     right_x = part_x2 + 50
-    for right in range(i, n_boxes):
-        if data['text'][right] == '|':
-            print(right)
-            right_x = data['left'][right]
-            break
+    # for right in range(i, n_boxes):
+    #     if data['text'][right] == '|':
+    #         print(right)
+    #         right_x = data['left'][right]
+    #         break
 
     left_x = part_x1 - 50
-    for left in range(i, 0, -1):
-        if data['text'][left] == '|':
-            print(left)
-            if data['left'][left] <= part_x1:
-                left_x = data['left'][left]
-            break
+    # for left in range(i, 0, -1):
+    #     if data['text'][left] == '|':
+    #         print(left)
+    #         if data['left'][left] <= part_x1:
+    #             left_x = data['left'][left]
+    #         break
     return left_x, right_x, part_y2
 
 
@@ -102,7 +102,7 @@ def get_part_number(img, picture_number):
         if not line:
             continue  # 跳过空行
         cleaned_line = clean_text(line)
-        # print(f"行内容: {cleaned_line}")
+        print(f"行内容: {cleaned_line}")
         # 提取料号
         match = re.search(r'\b(\d{3}-\d{3})-\d{4}\b', cleaned_line)
         if match:
@@ -132,8 +132,17 @@ def get_revision(img):
 
 
 if __name__ == "__main__":
-    picture_number = '948-000'
+    picture_number = '121-400'
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    file_path = r'C:\Users\hf\Documents\WeChat Files\wxid_l44618or5fh522\FileStorage\File\2025-04\121-400-9000_CG.pdf'
+    images = pdf_to_image(file_path)
+    # revision
+    revision_result = get_revision(images[0])
+    part_number_result = get_part_number(images[0], picture_number)
+    print(revision_result, part_number_result)
+    exit()
+
+
 
     rows = []
     error_file = []
