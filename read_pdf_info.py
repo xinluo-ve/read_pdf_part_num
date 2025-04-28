@@ -13,11 +13,10 @@ def pdf_to_image(pdf_path, dpi=300):
     return images
 
 
-def find_part_number_header_position(img):
+def find_part_number_position(img):
     data = pytesseract.image_to_data(img, lang="eng", config="--psm 6", output_type=pytesseract.Output.DICT)
     n_boxes = len(data['text'])
-    part_x1 = part_x2 = part_y1 = part_y2 = None
-    i = 0
+    part_x1 = part_x2 = None
     width = None
     for i in range(n_boxes):
         text = data['text'][i].strip().upper()
@@ -91,14 +90,14 @@ def clean_text(line):
 
 
 def get_part_number(img, picture_number):
-    x1, x2 = find_part_number_header_position(img)
+    x1, x2 = find_part_number_position(img)
     result = []
     if not x1 and not x2:
         return result
 
     cropped = img.crop((x1, 0, x2, img.height))
     cropped.save('part_number_img.png')
-    text = pytesseract.image_to_string(cropped, lang='eng', config='--psm 6')
+    text = pytesseract.image_to_string(cropped, lang='eng', config='--psm 1')
     lines = text.split('\n')
     for line in lines:
         line = line.strip()
@@ -106,6 +105,8 @@ def get_part_number(img, picture_number):
             continue  # 跳过空行
         cleaned_line = clean_text(line)
         print(f"行内容: {cleaned_line}")
+        if len(cleaned_line.split('-')) != 3:
+            continue
         # 提取料号
         picture_number1, picture_number2, picture_number3 = picture_number.split('-')
         cleaned_line1, cleaned_line2, cleaned_line3 = cleaned_line.split('-')
