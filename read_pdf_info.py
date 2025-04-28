@@ -18,31 +18,33 @@ def find_part_number_header_position(img):
     n_boxes = len(data['text'])
     part_x1 = part_x2 = part_y1 = part_y2 = None
     i = 0
+    width = None
     for i in range(n_boxes):
         text = data['text'][i].strip().upper()
         next_text = data['text'][i + 1].strip().upper()
         if text == "PART" and next_text == 'NUMBER':
             part_x1 = data['left'][i]
+            width = data['width'][i]
             part_x2 = data['left'][i + 1] + data['width'][i + 1]
             break
 
     if not part_x1 and not part_x2:
         return None, None
 
-    right_x = part_x2 + 50
-    for right in range(i, n_boxes):
-        if data['text'][right] == '|':
-            print(right)
-            right_x = data['left'][right]
-            break
+    right_x = part_x2 + width
+    # for right in range(i, n_boxes):
+    #     if data['text'][right] == '|':
+    #         if data['left'][right] <= right_x:
+    #             right_x = data['left'][right]
+    #         break
 
-    left_x = part_x1 - 50
-    for left in range(i, 0, -1):
-        if data['text'][left] == '|':
-            print(left)
-            if data['left'][left] <= part_x1:
-                left_x = data['left'][left]
-            break
+    left_x = part_x1 - width
+    # for left in range(i, 0, -1):
+    #     if data['text'][left] == '|':
+    #         print(left)
+    #         if data['left'][left] >= left_x:
+    #             left_x = data['left'][left]
+    #         break
     return left_x, right_x
 
 
@@ -51,13 +53,14 @@ def find_revision_position(img):
     n_boxes = len(data['text'])
     part_x1 = part_x2 = part_y1 = part_y2 = None
     i = 0
-    for i in range(n_boxes):
+    for i in range(n_boxes - 1, -1, -1):
         text = data['text'][i].strip().upper()
         if text == "REVISION" or text == 'REV':
             part_x1 = data['left'][i]
             width = data['width'][i]
             part_x2 = part_x1 + width
             part_y2 = data['top'][i]
+            break
 
     right_x = part_x2 + 50
     # for right in range(i, n_boxes):
@@ -104,13 +107,21 @@ def get_part_number(img, picture_number):
         cleaned_line = clean_text(line)
         print(f"行内容: {cleaned_line}")
         # 提取料号
-        match = re.search(r'\b(\d{3}-\d{3})-\d{4}\b', cleaned_line)
-        if match:
-            found_picture_number = match.group(1)  # 提取948-000
-            # 判断是否和传入的picture_number一致
-            if found_picture_number == picture_number:
-                print({'cleaned_line': cleaned_line})
-                result.append(cleaned_line)
+        picture_number1, picture_number2, picture_number3 = picture_number.split('-')
+        cleaned_line1, cleaned_line2, cleaned_line3 = cleaned_line.split('-')
+        if picture_number1 in cleaned_line.split('-')[0] and picture_number2 ==  cleaned_line2:
+            cleaned_line3 = cleaned_line3[:len(picture_number3)]
+            new_cleaned_line = picture_number1 + '-' + picture_number2 + '-' + cleaned_line3
+            result.append(new_cleaned_line)
+            print(new_cleaned_line)
+        # match = re.search(r'\b(\d{3}-\d{3})-\d{4}\b', cleaned_line)
+        #
+        # if match:
+        #     found_picture_number = match.group(1)  # 提取948-000
+        #     # 判断是否和传入的picture_number一致
+        #     if found_picture_number == picture_number:
+        #         print({'cleaned_line': cleaned_line})
+        #         result.append(cleaned_line)
     return result
 
 
@@ -132,7 +143,7 @@ def get_revision(img):
 
 
 if __name__ == "__main__":
-    picture_number = '121-400'
+    picture_number = '121-400-7000'
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     file_path = r'C:\Users\hf\Documents\WeChat Files\wxid_l44618or5fh522\FileStorage\File\2025-04\121-400-9000_CG.pdf'
     images = pdf_to_image(file_path)
