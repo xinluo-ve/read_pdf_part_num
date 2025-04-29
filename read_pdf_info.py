@@ -13,9 +13,10 @@ def pdf_to_image(pdf_path, dpi=300):
     return images
 
 
-def find_part_number_position(img):
+def get_part_number(img, picture_number):
     data = pytesseract.image_to_data(img, lang="eng", config="--psm 6", output_type=pytesseract.Output.DICT)
     n_boxes = len(data['text'])
+    # 获取part number位置
     part_x1 = part_x2 = None
     width = None
     for i in range(n_boxes):
@@ -26,32 +27,27 @@ def find_part_number_position(img):
             width = data['width'][i]
             part_x2 = data['left'][i + 1] + data['width'][i + 1]
             break
-
-    if not part_x1 and not part_x2:
-        return None, None
-
     right_x = part_x2 + width
-    # for right in range(i, n_boxes):
-    #     if data['text'][right] == '|':
-    #         if data['left'][right] <= right_x:
-    #             right_x = data['left'][right]
-    #         break
-
     left_x = part_x1 - width
-    # for left in range(i, 0, -1):
-    #     if data['text'][left] == '|':
-    #         print(left)
-    #         if data['left'][left] >= left_x:
-    #             left_x = data['left'][left]
-    #         break
-    return left_x, right_x
+
+    # 匹配
+    result = []
+    for i in range(n_boxes):
+        text = data['text'][i].strip().upper()
+        i_x1 = data['left'][i]
+        i_x2 = data['left'][i] + data['width'][i]
+        if i_x1 >= left_x and i_x2 <= right_x:
+            new_text = part_number_match(picture_number, text)
+            if new_text is not None:
+                print(new_text)
+                result.append(new_text)
+    return result
 
 
 def find_revision_position(img):
     data = pytesseract.image_to_data(img, lang="eng", config="--psm 6", output_type=pytesseract.Output.DICT)
     n_boxes = len(data['text'])
     part_x1 = part_x2 = part_y1 = part_y2 = None
-    i = 0
     for i in range(n_boxes - 1, -1, -1):
         text = data['text'][i].strip().upper()
         if text == "REVISION" or text == 'REV':
@@ -60,21 +56,8 @@ def find_revision_position(img):
             part_x2 = part_x1 + width
             part_y2 = data['top'][i]
             break
-
     right_x = part_x2 + 50
-    # for right in range(i, n_boxes):
-    #     if data['text'][right] == '|':
-    #         print(right)
-    #         right_x = data['left'][right]
-    #         break
-
     left_x = part_x1 - 50
-    # for left in range(i, 0, -1):
-    #     if data['text'][left] == '|':
-    #         print(left)
-    #         if data['left'][left] <= part_x1:
-    #             left_x = data['left'][left]
-    #         break
     return left_x, right_x, part_y2
 
 
@@ -88,33 +71,45 @@ def clean_text(line):
     """清理掉行开头的符号，比如 | [ ] { } 空格"""
     return re.sub(r'^[\|\[\]\{\}\s]+', '', line)
 
+def part_number_match(picture_number, input_data):
+    if len(input_data.split('-')) != 3:
+        return None
+    picture_number1, picture_number2, picture_number3 = picture_number.split('-')
+    cleaned_line1, cleaned_line2, cleaned_line3 = input_data.split('-')
+    if picture_number1 in cleaned_line1 and picture_number2 == cleaned_line2:
+        cleaned_line3 = cleaned_line3[:len(picture_number3)]
+        new_input_data = picture_number1 + '-' + picture_number2 + '-' + cleaned_line3
+        return new_input_data
+    else:
+        return None
 
-def get_part_number(img, picture_number):
-    x1, x2 = find_part_number_position(img)
-    result = []
-    if not x1 and not x2:
-        return result
 
-    cropped = img.crop((x1, 0, x2, img.height))
-    cropped.save('part_number_img.png')
-    text = pytesseract.image_to_string(cropped, lang='eng', config='--psm 1')
-    lines = text.split('\n')
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue  # 跳过空行
-        cleaned_line = clean_text(line)
-        print(f"行内容: {cleaned_line}")
-        if len(cleaned_line.split('-')) != 3:
-            continue
-        # 提取料号
-        picture_number1, picture_number2, picture_number3 = picture_number.split('-')
-        cleaned_line1, cleaned_line2, cleaned_line3 = cleaned_line.split('-')
-        if picture_number1 in cleaned_line.split('-')[0] and picture_number2 ==  cleaned_line2:
-            cleaned_line3 = cleaned_line3[:len(picture_number3)]
-            new_cleaned_line = picture_number1 + '-' + picture_number2 + '-' + cleaned_line3
-            result.append(new_cleaned_line)
-            print(new_cleaned_line)
+# def get_part_number(img, picture_number):
+#     result = find_part_number_position(img)
+    # result = []
+    # if not x1 and not x2:
+    #     return result
+    #
+    # cropped = img.crop((x1, 0, x2, img.height))
+    # cropped.save('part_number_img.png')
+    # text = pytesseract.image_to_string(cropped, lang='eng', config='--psm 6')
+    # lines = text.split('\n')
+    # for line in lines:
+    #     line = line.strip()
+    #     if not line:
+    #         continue  # 跳过空行
+    #     cleaned_line = clean_text(line)
+    #     print(f"行内容: {cleaned_line}")
+    #     if len(cleaned_line.split('-')) != 3:
+    #         continue
+    #     # 提取料号
+    #     picture_number1, picture_number2, picture_number3 = picture_number.split('-')
+    #     cleaned_line1, cleaned_line2, cleaned_line3 = cleaned_line.split('-')
+    #     if picture_number1 in cleaned_line.split('-')[0] and picture_number2 ==  cleaned_line2:
+    #         cleaned_line3 = cleaned_line3[:len(picture_number3)]
+    #         new_cleaned_line = picture_number1 + '-' + picture_number2 + '-' + cleaned_line3
+    #         result.append(new_cleaned_line)
+    #         print(new_cleaned_line)
         # match = re.search(r'\b(\d{3}-\d{3})-\d{4}\b', cleaned_line)
         #
         # if match:
@@ -123,7 +118,7 @@ def get_part_number(img, picture_number):
         #     if found_picture_number == picture_number:
         #         print({'cleaned_line': cleaned_line})
         #         result.append(cleaned_line)
-    return result
+    # return result
 
 
 def get_revision(img):
@@ -144,13 +139,14 @@ def get_revision(img):
 
 
 if __name__ == "__main__":
-    picture_number = '121-400-7000'
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    file_path = r'C:\Users\hf\Documents\WeChat Files\wxid_l44618or5fh522\FileStorage\File\2025-04\121-400-9000_CG.pdf'
+
+    picture_number = '120-000-4020'
+    file_path = r'C:\Users\hf\Documents\WeChat Files\wxid_l44618or5fh522\FileStorage\File\2025-04\120-000-4020.pdf'
     images = pdf_to_image(file_path)
     # revision
-    revision_result = get_revision(images[0])
     part_number_result = get_part_number(images[0], picture_number)
+    revision_result = get_revision(images[0])
     print(revision_result, part_number_result)
     exit()
 
