@@ -121,19 +121,19 @@ def part_number_match(picture_number, input_data):
     # return result
 
 
-def get_revision(img):
+def get_revision(img, file_prod):
     x1, x2, y2 = find_revision_position(img)
     cropped = img.crop((x1, y2, x2, img.height))
-    cropped.save('revision_img.png')
-    text = pytesseract.image_to_string(cropped, lang='eng', config='--psm 6')
+    cropped.save(f'revision_img_{0}_{file_prod}revision_img.png')
+    text = pytesseract.image_to_string(cropped, lang='eng', config='--psm 1')
     lines = text.split('\n')
     result = []
     for line in lines:
         line = line.strip()
-        if not line:
+        if not line or 'REV' in line or "REVISION" in line:
             continue  # 跳过空行
         cleaned_line = clean_text(line)
-        print(f"行内容: {cleaned_line}")
+        print(f"vision: {cleaned_line}")
         result.append(cleaned_line)
     return result
 
@@ -155,38 +155,45 @@ if __name__ == "__main__":
     rows = []
     error_file = []
     cols = ['料号', 'REVISION', 'PART NUMBER']
-    error_cols = ['异常pdf']
-    for root, dirs, files in os.walk(r"D:\data\desktop\pdf图纸编辑修改\图纸"):
-        for file in files:
+    error_cols = ['异常pdf', '异常原因']
+    for root, dirs, files in os.walk(r".\图纸"):
+        for file_idx, file in enumerate(files):
+            if file_idx < 10:
+                continue
+            if file_idx >= 20:
+                break
             file_path = os.path.join(root, file)
             file_prod = file.split('.pdf')[0]
             print(file_prod)
+            images = pdf_to_image(file_path)
+            # revision
             try:
-                picture_number = file_prod.split('-')[0] + '-' + file_prod.split('-')[1]
-                images = pdf_to_image(file_path)
-                # revision
-                revision_result = get_revision(images[0])
-                vision = (revision_result[0] if len(revision_result) != 0 else '')
-
-                # PART NUMBER
-                cleaned_line_list = []
-                for img in images:
-                    cleaned_line_list.extend(get_part_number(img, picture_number))
-
-                if len(cleaned_line_list) == 0:
-                    error_file.append(file_prod)
-                    continue
-                for cleaned_line in cleaned_line_list:
-                    rows.append([file_prod, vision, cleaned_line])
+                revision_result = get_revision(images[0], file_prod)
+                vision = (revision_result[0] if len(revision_result) == 1 else '')
             except:
-                error_file.append(file_prod)
+                error_file.append([file_prod, 'vision错误'])
+                print(f'{file_prod}, vision错误')
+                vision = ''
+
+            # PART NUMBER
+            cleaned_line_list = []
+            try:
+                for img_idx, img in enumerate(images):
+                    cleaned_line_list.extend(get_part_number(img_idx, img, file_prod.split('_')[0]))
+            except:
+                error_file.append([file_prod, 'part_number错误'])
+                print(f'{file_prod}, part_number错误')
+
+            if len(cleaned_line_list) == 0:
+                error_file.append([file_prod, ''])
+            for cleaned_line in cleaned_line_list:
+                rows.append([file_prod, vision, cleaned_line])
 
     df = pd.DataFrame(rows, columns=cols)
     error_df = pd.DataFrame(error_file, columns=error_cols)
-    with pd.ExcelWriter('PART_NUMBER_20250428.xlsx') as writer:
+    with pd.ExcelWriter('PART_NUMBER_20250428_2.xlsx') as writer:
         df.to_excel(writer, sheet_name='PART_NUMBER')
         error_df.to_excel(writer, sheet_name='error')
-
 
 
 
