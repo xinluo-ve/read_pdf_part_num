@@ -5,7 +5,8 @@ import pandas as pd
 from pdf2image import convert_from_path
 import pytesseract
 from PIL import Image
-
+from PIL import Image, ImageOps, ImageEnhance
+import pytesseract
 
 def pdf_to_image(pdf_path, dpi=300):
     """PDF转图片"""
@@ -14,7 +15,15 @@ def pdf_to_image(pdf_path, dpi=300):
 
 
 def get_part_number(img, picture_number):
-    data = pytesseract.image_to_data(img, lang="eng", config="--psm 6", output_type=pytesseract.Output.DICT)
+    gray = img.convert('L')  # 'L'模式是灰度
+    # 2. 提升对比度（可选）
+    enhancer = ImageEnhance.Contrast(gray)
+    gray_enhanced = enhancer.enhance(10)  # 参数 >1 增强，1.5~2.0比较合适
+    # 3. 简单二值化（阈值处理）
+    threshold = 150
+    binary = gray_enhanced.point(lambda p: 255 if p > threshold else 0)
+    binary.save('revision_img.png')
+    data = pytesseract.image_to_data(binary, lang="eng", config="--psm 1", output_type=pytesseract.Output.DICT)
     n_boxes = len(data['text'])
     # 获取part number位置
     part_x1 = part_x2 = None
@@ -76,7 +85,7 @@ def part_number_match(picture_number, input_data):
         return None
     picture_number1, picture_number2, picture_number3 = picture_number.split('-')
     cleaned_line1, cleaned_line2, cleaned_line3 = input_data.split('-')
-    if picture_number1 in cleaned_line1 and picture_number2 == cleaned_line2:
+    if picture_number1[-2:] == cleaned_line1[-2:] and picture_number2 == cleaned_line2:
         cleaned_line3 = cleaned_line3[:len(picture_number3)]
         new_input_data = picture_number1 + '-' + picture_number2 + '-' + cleaned_line3
         return new_input_data
@@ -141,8 +150,8 @@ def get_revision(img, file_prod):
 if __name__ == "__main__":
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
-    picture_number = '120-000-4020'
-    file_path = r'C:\Users\hf\Documents\WeChat Files\wxid_l44618or5fh522\FileStorage\File\2025-04\120-000-4020.pdf'
+    picture_number = '120-000-1980'
+    file_path = r'图纸\120-000-1980.pdf'
     images = pdf_to_image(file_path)
     # revision
     part_number_result = get_part_number(images[0], picture_number)
