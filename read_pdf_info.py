@@ -8,7 +8,6 @@ from PIL import Image
 from PIL import Image, ImageOps, ImageEnhance
 import pytesseract
 
-
 def pdf_to_image(pdf_path, dpi=300):
     """PDF转图片"""
     images = convert_from_path(pdf_path, dpi=dpi)
@@ -16,44 +15,43 @@ def pdf_to_image(pdf_path, dpi=300):
 
 
 def get_part_number(img_idx, img, picture_number):
-    gray = img.convert('L')  # 'L'模式是灰度
-    # 2. 提升对比度（可选）
-    enhancer = ImageEnhance.Contrast(gray)
-    gray_enhanced = enhancer.enhance(10)  # 参数 >1 增强，1.5~2.0比较合适
-    # 3. 简单二值化（阈值处理）
-    threshold = 150
-    binary = gray_enhanced.point(lambda p: 255 if p > threshold else 0)
-    binary.save(f'part_number_img_{img_idx}_{picture_number}.png')
-    data = pytesseract.image_to_data(binary, lang="eng", config="--psm 1", output_type=pytesseract.Output.DICT)
-    n_boxes = len(data['text'])
-    # 获取part number位置
-    part_x1 = part_x2 = None
-    width = None
-    for i in range(n_boxes):
-        text = data['text'][i].strip().upper()
-        next_text = data['text'][i + 1].strip().upper()
-        if text == "PART" and next_text == 'NUMBER':
-            part_x1 = data['left'][i]
-            width = data['width'][i]
-            part_x2 = data['left'][i + 1] + data['width'][i + 1]
-            break
-    if not part_x1 and not part_x2:
-        return []
-
-    right_x = part_x2 + width
-    left_x = part_x1 - width
-
-    # 匹配
     result = []
-    for i in range(n_boxes):
-        text = data['text'][i].strip().upper()
-        i_x1 = data['left'][i]
-        i_x2 = data['left'][i] + data['width'][i]
-        if i_x1 >= left_x and i_x2 <= right_x:
-            new_text = part_number_match(picture_number, text)
-            if new_text is not None:
-                print(f'part_number: {new_text}')
-                result.append(new_text)
+    for enhance_config in [1, 2, 5, 10]:
+        gray = img.convert('L')  # 'L'模式是灰度
+        # 2. 提升对比度（可选）
+        enhancer = ImageEnhance.Contrast(gray)
+        gray_enhanced = enhancer.enhance(enhance_config)  # 参数 >1 增强，1.5~2.0比较合适
+        # 3. 简单二值化（阈值处理）
+        threshold = 150
+        binary = gray_enhanced.point(lambda p: 255 if p > threshold else 0)
+        binary.save(f'part_number_img_{img_idx}_{picture_number}.png')
+        data = pytesseract.image_to_data(binary, lang="eng", config="--psm 1", output_type=pytesseract.Output.DICT)
+        n_boxes = len(data['text'])
+        # 获取part number位置
+        part_x1 = part_x2 = None
+        width = None
+        for i in range(n_boxes - 1):
+            text = data['text'][i].strip().upper()
+            next_text = data['text'][i + 1].strip().upper()
+            if text[-3:] == "PART"[-3:] and next_text == 'NUMBER':
+                part_x1 = data['left'][i]
+                width = data['width'][i]
+                part_x2 = data['left'][i + 1] + data['width'][i + 1]
+                break
+        if part_x1 is None or part_x2 is None:
+            continue
+        right_x = part_x2 + width
+        left_x = part_x1 - width
+        # 匹配
+        for i in range(n_boxes):
+            text = data['text'][i].strip().upper()
+            i_x1 = data['left'][i]
+            i_x2 = data['left'][i] + data['width'][i]
+            if i_x1 >= left_x and i_x2 <= right_x:
+                new_text = part_number_match(picture_number, text)
+                if new_text is not None and new_text not in result:
+                    print('part_numer:', new_text)
+                    result.append(new_text)
     return result
 
 
@@ -84,7 +82,6 @@ def clean_text(line):
     """清理掉行开头的符号，比如 | [ ] { } 空格"""
     return re.sub(r'^[\|\[\]\{\}\s]+', '', line)
 
-
 def part_number_match(picture_number, input_data):
     if len(input_data.split('-')) != 3:
         return None
@@ -96,43 +93,6 @@ def part_number_match(picture_number, input_data):
         return new_input_data
     else:
         return None
-
-
-# def get_part_number(img, picture_number):
-#     result = find_part_number_position(img)
-    # result = []
-    # if not x1 and not x2:
-    #     return result
-    #
-    # cropped = img.crop((x1, 0, x2, img.height))
-    # cropped.save('part_number_img.png')
-    # text = pytesseract.image_to_string(cropped, lang='eng', config='--psm 6')
-    # lines = text.split('\n')
-    # for line in lines:
-    #     line = line.strip()
-    #     if not line:
-    #         continue  # 跳过空行
-    #     cleaned_line = clean_text(line)
-    #     print(f"行内容: {cleaned_line}")
-    #     if len(cleaned_line.split('-')) != 3:
-    #         continue
-    #     # 提取料号
-    #     picture_number1, picture_number2, picture_number3 = picture_number.split('-')
-    #     cleaned_line1, cleaned_line2, cleaned_line3 = cleaned_line.split('-')
-    #     if picture_number1 in cleaned_line.split('-')[0] and picture_number2 ==  cleaned_line2:
-    #         cleaned_line3 = cleaned_line3[:len(picture_number3)]
-    #         new_cleaned_line = picture_number1 + '-' + picture_number2 + '-' + cleaned_line3
-    #         result.append(new_cleaned_line)
-    #         print(new_cleaned_line)
-        # match = re.search(r'\b(\d{3}-\d{3})-\d{4}\b', cleaned_line)
-        #
-        # if match:
-        #     found_picture_number = match.group(1)  # 提取948-000
-        #     # 判断是否和传入的picture_number一致
-        #     if found_picture_number == picture_number:
-        #         print({'cleaned_line': cleaned_line})
-        #         result.append(cleaned_line)
-    # return result
 
 
 def get_revision(img, file_prod):
