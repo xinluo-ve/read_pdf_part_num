@@ -16,15 +16,15 @@ def pdf_to_image(pdf_path, dpi=300):
 
 def get_part_number(img_idx, img, picture_number):
     result = []
+    gray = img.convert('L')  # 'L'模式是灰度
     for enhance_config in [1, 2, 5, 10]:
-        gray = img.convert('L')  # 'L'模式是灰度
         # 2. 提升对比度（可选）
         enhancer = ImageEnhance.Contrast(gray)
         gray_enhanced = enhancer.enhance(enhance_config)  # 参数 >1 增强，1.5~2.0比较合适
         # 3. 简单二值化（阈值处理）
         threshold = 150
         binary = gray_enhanced.point(lambda p: 255 if p > threshold else 0)
-        binary.save(f'part_number_img_{img_idx}_{picture_number}.png')
+        # binary.save(f'part_number_img_{img_idx}_{picture_number}.png')
         data = pytesseract.image_to_data(binary, lang="eng", config="--psm 1", output_type=pytesseract.Output.DICT)
         n_boxes = len(data['text'])
         # 获取part number位置
@@ -117,40 +117,40 @@ if __name__ == "__main__":
 
     rows = []
     error_file = []
-    cols = ['料号', 'REVISION', 'PART NUMBER']
-    error_cols = ['异常pdf', '异常原因']
+    cols = ['图纸号', '页码', 'REVISION', 'PART NUMBER']
+    error_cols = ['异常图纸号','页码', '异常原因']
+
     for root, dirs, files in os.walk(r".\图纸"):
         for file_idx, file in enumerate(files):
-            if file_idx < 10:
+            if file.split('-')[0] != '120':
                 continue
-            if file_idx >= 20:
-                break
             file_path = os.path.join(root, file)
             file_prod = file.split('.pdf')[0]
             print(f'当前运行pdf：{file_prod}')
             images = pdf_to_image(file_path)
             # revision
             try:
-                revision_result = get_revision(images[0], file_prod)
-                vision = (revision_result[0] if len(revision_result) == 1 else '')
+                revision_result = get_revision(images[0], file_prod.split('_')[0])
+                revision = (revision_result[0] if len(revision_result) == 1 else '')
             except:
                 error_file.append([file_prod, 'vision错误'])
                 print(f'{file_prod}, vision错误')
-                vision = ''
+                revision = ''
 
             # PART NUMBER
-            cleaned_line_list = []
-            try:
-                for img_idx, img in enumerate(images):
+            for img_idx, img in enumerate(images):
+                try:
+                    cleaned_line_list = []
                     cleaned_line_list.extend(get_part_number(img_idx, img, file_prod.split('_')[0]))
-            except:
-                error_file.append([file_prod, 'part_number错误'])
-                print(f'{file_prod}, part_number错误')
-
-            if len(cleaned_line_list) == 0:
-                error_file.append([file_prod, ''])
-            for cleaned_line in cleaned_line_list:
-                rows.append([file_prod, vision, cleaned_line])
+                except:
+                    error_file.append([file_prod, img_idx, 'part_number错误'])
+                    cleaned_line_list = []
+                    print(file_prod, img_idx, 'part_number错误')
+                if len(cleaned_line_list) == 0:
+                    error_file.append([file_prod, img_idx, 'part_number为空'])
+                    print(file_prod, img_idx, 'part_number为空')
+                for c in cleaned_line_list:
+                    rows.append([file_prod, img_idx, revision, c])
 
     df = pd.DataFrame(rows, columns=cols)
     error_df = pd.DataFrame(error_file, columns=error_cols)
