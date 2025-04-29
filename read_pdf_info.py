@@ -1,5 +1,6 @@
 import os
 import re
+import time
 
 import pandas as pd
 from pdf2image import convert_from_path
@@ -12,6 +13,58 @@ def pdf_to_image(pdf_path, dpi=300):
     """PDF转图片"""
     images = convert_from_path(pdf_path, dpi=dpi)
     return images
+
+def process_one_config(args):
+    img, enhance_config, picture_number = args
+    gray = img.convert('L')
+    enhancer = ImageEnhance.Contrast(gray)
+    gray_enhanced = enhancer.enhance(enhance_config)
+    threshold = 150
+    binary = gray_enhanced.point(lambda p: 255 if p > threshold else 0)
+    # binary.save(f'part_number_img_{img_idx}_{picture_number}.png')
+    data = pytesseract.image_to_data(binary, lang="eng", config="--psm 1", output_type=pytesseract.Output.DICT)
+    n_boxes = len(data['text'])
+    # 获取part number位置
+    part_x1 = part_x2 = None
+    width = None
+    for i in range(n_boxes - 1):
+        text = data['text'][i].strip().upper()
+        next_text = data['text'][i + 1].strip().upper()
+        if text[-3:] == "PART"[-3:] and next_text == 'NUMBER':
+            part_x1 = data['left'][i]
+            width = data['width'][i]
+            part_x2 = data['left'][i + 1] + data['width'][i + 1]
+            break
+    if part_x1 is None or part_x2 is None:
+        return []
+
+    result = []
+    right_x = part_x2 + width
+    left_x = part_x1 - width
+    # 匹配
+    for i in range(n_boxes):
+        text = data['text'][i].strip().upper()
+        i_x1 = data['left'][i]
+        i_x2 = data['left'][i] + data['width'][i]
+        if i_x1 >= left_x and i_x2 <= right_x:
+            new_text = part_number_match(picture_number, text)
+            if new_text is not None and new_text not in result:
+                print('part_numer:', new_text)
+                result.append(new_text)
+    return result
+
+from multiprocessing import Pool, Manager
+from PIL import ImageEnhance
+
+def get_mult_part_number(img_idx, img, picture_number):
+    enhance_configs = [1, 2, 5, 10]
+    args_list = [(img, config, picture_number) for config in enhance_configs]
+
+    with Pool(processes=4) as pool:  # 4个进程，可以根据CPU数调整
+        results = pool.map(process_one_config, args_list)
+    # 合并去重结果
+    flat_result = list(set(r for lst in results for r in lst))
+    return flat_result
 
 
 def get_part_number(img_idx, img, picture_number):
@@ -118,15 +171,15 @@ if __name__ == "__main__":
     rows = []
     error_file = []
     cols = ['图纸号', '页码', 'REVISION', 'PART NUMBER']
-    error_cols = ['异常图纸号','页码', '异常原因']
-
+    error_cols = ['异常图纸号', '页码', '异常原因']
+    s = time.time()
     for root, dirs, files in os.walk(r".\图纸"):
         for file_idx, file in enumerate(files):
-            if file.split('-')[0] != '120':
+            if file.split('-')[0][0] != '7':
                 continue
             file_path = os.path.join(root, file)
             file_prod = file.split('.pdf')[0]
-            print(f'当前运行pdf：{file_prod}')
+            print(f'当前运行pdf：{file_prod}', time.time() - s)
             images = pdf_to_image(file_path)
             # revision
             try:
@@ -141,7 +194,7 @@ if __name__ == "__main__":
             for img_idx, img in enumerate(images):
                 try:
                     cleaned_line_list = []
-                    cleaned_line_list.extend(get_part_number(img_idx, img, file_prod.split('_')[0]))
+                    cleaned_line_list.extend(get_mult_part_number(img_idx, img, file_prod.split('_')[0]))
                 except:
                     error_file.append([file_prod, img_idx, 'part_number错误'])
                     cleaned_line_list = []
