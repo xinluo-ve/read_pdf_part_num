@@ -8,13 +8,14 @@ from PIL import Image
 from PIL import Image, ImageOps, ImageEnhance
 import pytesseract
 
+
 def pdf_to_image(pdf_path, dpi=300):
     """PDF转图片"""
     images = convert_from_path(pdf_path, dpi=dpi)
     return images
 
 
-def get_part_number(img, picture_number):
+def get_part_number(img_idx, img, picture_number):
     gray = img.convert('L')  # 'L'模式是灰度
     # 2. 提升对比度（可选）
     enhancer = ImageEnhance.Contrast(gray)
@@ -22,7 +23,7 @@ def get_part_number(img, picture_number):
     # 3. 简单二值化（阈值处理）
     threshold = 150
     binary = gray_enhanced.point(lambda p: 255 if p > threshold else 0)
-    binary.save('revision_img.png')
+    binary.save(f'part_number_img_{img_idx}_{picture_number}.png')
     data = pytesseract.image_to_data(binary, lang="eng", config="--psm 1", output_type=pytesseract.Output.DICT)
     n_boxes = len(data['text'])
     # 获取part number位置
@@ -36,6 +37,9 @@ def get_part_number(img, picture_number):
             width = data['width'][i]
             part_x2 = data['left'][i + 1] + data['width'][i + 1]
             break
+    if not part_x1 and not part_x2:
+        return []
+
     right_x = part_x2 + width
     left_x = part_x1 - width
 
@@ -48,7 +52,7 @@ def get_part_number(img, picture_number):
         if i_x1 >= left_x and i_x2 <= right_x:
             new_text = part_number_match(picture_number, text)
             if new_text is not None:
-                print(new_text)
+                print(f'part_number: {new_text}')
                 result.append(new_text)
     return result
 
@@ -79,6 +83,7 @@ def crop_header_area(image, x1, x2):
 def clean_text(line):
     """清理掉行开头的符号，比如 | [ ] { } 空格"""
     return re.sub(r'^[\|\[\]\{\}\s]+', '', line)
+
 
 def part_number_match(picture_number, input_data):
     if len(input_data.split('-')) != 3:
@@ -150,17 +155,6 @@ def get_revision(img, file_prod):
 if __name__ == "__main__":
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
-    picture_number = '120-000-1980'
-    file_path = r'图纸\120-000-1980.pdf'
-    images = pdf_to_image(file_path)
-    # revision
-    part_number_result = get_part_number(images[0], picture_number)
-    revision_result = get_revision(images[0])
-    print(revision_result, part_number_result)
-    exit()
-
-
-
     rows = []
     error_file = []
     cols = ['料号', 'REVISION', 'PART NUMBER']
@@ -173,7 +167,7 @@ if __name__ == "__main__":
                 break
             file_path = os.path.join(root, file)
             file_prod = file.split('.pdf')[0]
-            print(file_prod)
+            print(f'当前运行pdf：{file_prod}')
             images = pdf_to_image(file_path)
             # revision
             try:
